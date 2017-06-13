@@ -1,8 +1,10 @@
 package com.tania.mysoundrecoder.Listeners;
 
 /**
- * Created by User on 3/16/2017.
+ * Created by User on 6/13/2017.
  */
 
-public class OnDatabaseChangedListener {
+ public interface OnDatabaseChangedListener {
+    void onNewDatabaseEntryAdded();
+    void onDatabaseEntryRenamed();
 }

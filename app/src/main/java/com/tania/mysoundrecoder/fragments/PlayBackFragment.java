@@ -1,109 +1,324 @@
 package com.tania.mysoundrecoder.fragments;
 
-import android.content.Context;
-import android.net.Uri;
+import android.app.AlertDialog;
+import android.app.Dialog;
+import android.graphics.ColorFilter;
+import android.graphics.LightingColorFilter;
+import android.media.MediaPlayer;
 import android.os.Bundle;
-import android.support.v4.app.Fragment;
-import android.view.LayoutInflater;
+import android.os.Handler;
+import android.support.annotation.NonNull;
+import android.support.v4.app.DialogFragment;
+import android.util.Log;
 import android.view.View;
-import android.view.ViewGroup;
+import android.view.Window;
+import android.view.WindowManager;
+import android.widget.SeekBar;
+import android.widget.TextView;
 
+import com.melnykov.fab.FloatingActionButton;
 import com.tania.mysoundrecoder.R;
+import com.tania.mysoundrecoder.RecordingItem;
+
+import java.io.IOException;
+import java.util.concurrent.TimeUnit;
 
 /**
- * A simple {@link Fragment} subclass.
- * Activities that contain this fragment must implement the
- * {@link PlayBackFragment.OnFragmentInteractionListener} interface
- * to handle interaction events.
- * Use the {@link PlayBackFragment#newInstance} factory method to
- * create an instance of this fragment.
+ * Created by User on 6/13/2017.
  */
-public class PlayBackFragment extends Fragment {
-    // TODO: Rename parameter arguments, choose names that match
-    // the fragment initialization parameters, e.g. ARG_ITEM_NUMBER
-    private static final String ARG_PARAM1 = "param1";
-    private static final String ARG_PARAM2 = "param2";
 
-    // TODO: Rename and change types of parameters
-    private String mParam1;
-    private String mParam2;
+public class PlayBackFragment extends DialogFragment {
 
-    private OnFragmentInteractionListener mListener;
+    private static final String LOG_TAG = "PlaybackFragment";
 
-    public PlayBackFragment() {
-        // Required empty public constructor
-    }
+    private static final String ARG_ITEM = "recording_item";
+    private RecordingItem item;
 
-    /**
-     * Use this factory method to create a new instance of
-     * this fragment using the provided parameters.
-     *
-     * @param param1 Parameter 1.
-     * @param param2 Parameter 2.
-     * @return A new instance of fragment PlayBackFragment.
-     */
-    // TODO: Rename and change types and number of parameters
-    public static PlayBackFragment newInstance(String param1, String param2) {
-        PlayBackFragment fragment = new PlayBackFragment();
-        Bundle args = new Bundle();
-        args.putString(ARG_PARAM1, param1);
-        args.putString(ARG_PARAM2, param2);
-        fragment.setArguments(args);
-        return fragment;
+    private Handler mHandler = new Handler();
+
+    private MediaPlayer mMediaPlayer = null;
+
+    private SeekBar mSeekBar = null;
+    private FloatingActionButton mPlayButton = null;
+    private TextView mCurrentProgressTextView = null;
+    private TextView mFileNameTextView = null;
+    private TextView mFileLengthTextView = null;
+
+    //stores whether or not the mediaplayer is currently playing audio
+    private boolean isPlaying = false;
+
+    //stores minutes and seconds of the length of the file.
+    long minutes = 0;
+    long seconds = 0;
+
+    public PlayBackFragment newInstance(RecordingItem item) {
+        PlayBackFragment f = new PlayBackFragment();
+        Bundle b = new Bundle();
+        b.putParcelable(ARG_ITEM, item);
+        f.setArguments(b);
+
+        return f;
     }
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        if (getArguments() != null) {
-            mParam1 = getArguments().getString(ARG_PARAM1);
-            mParam2 = getArguments().getString(ARG_PARAM2);
+        item = getArguments().getParcelable(ARG_ITEM);
+
+        long itemDuration = item.getLength();
+        minutes = TimeUnit.MILLISECONDS.toMinutes(itemDuration);
+        seconds = TimeUnit.MILLISECONDS.toSeconds(itemDuration)
+                - TimeUnit.MINUTES.toSeconds(minutes);
+    }
+
+    @Override
+    public void onActivityCreated(Bundle savedInstanceState) {
+        super.onActivityCreated(savedInstanceState);
+    }
+
+    @NonNull
+    @Override
+    public Dialog onCreateDialog(Bundle savedInstanceState) {
+
+        Dialog dialog = super.onCreateDialog(savedInstanceState);
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
+        View view = getActivity().getLayoutInflater().inflate(R.layout.fragment_play_back, null);
+
+        mFileNameTextView = (TextView) view.findViewById(R.id.file_name_text_view);
+        mFileLengthTextView = (TextView) view.findViewById(R.id.file_length_text_view);
+        mCurrentProgressTextView = (TextView) view.findViewById(R.id.current_progress_text_view);
+
+        mSeekBar = (SeekBar) view.findViewById(R.id.seekbar);
+        ColorFilter filter = new LightingColorFilter
+                (getResources().getColor(R.color.primary), getResources().getColor(R.color.primary));
+        mSeekBar.getProgressDrawable().setColorFilter(filter);
+        mSeekBar.getThumb().setColorFilter(filter);
+
+        mSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if(mMediaPlayer != null && fromUser) {
+                    mMediaPlayer.seekTo(progress);
+                    mHandler.removeCallbacks(mRunnable);
+
+                    long minutes = TimeUnit.MILLISECONDS.toMinutes(mMediaPlayer.getCurrentPosition());
+                    long seconds = TimeUnit.MILLISECONDS.toSeconds(mMediaPlayer.getCurrentPosition())
+                            - TimeUnit.MINUTES.toSeconds(minutes);
+                    mCurrentProgressTextView.setText(String.format("%02d:%02d", minutes,seconds));
+
+                    updateSeekBar();
+
+                } else if (mMediaPlayer == null && fromUser) {
+                    prepareMediaPlayerFromPoint(progress);
+                    updateSeekBar();
+                }
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+                if(mMediaPlayer != null) {
+                    // remove message Handler from updating progress bar
+                    mHandler.removeCallbacks(mRunnable);
+                }
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                if (mMediaPlayer != null) {
+                    mHandler.removeCallbacks(mRunnable);
+                    mMediaPlayer.seekTo(seekBar.getProgress());
+
+                    long minutes = TimeUnit.MILLISECONDS.toMinutes(mMediaPlayer.getCurrentPosition());
+                    long seconds = TimeUnit.MILLISECONDS.toSeconds(mMediaPlayer.getCurrentPosition())
+                            - TimeUnit.MINUTES.toSeconds(minutes);
+                    mCurrentProgressTextView.setText(String.format("%02d:%02d", minutes,seconds));
+                    updateSeekBar();
+                }
+            }
+        });
+
+        mPlayButton = (FloatingActionButton) view.findViewById(R.id.fab_play);
+        mPlayButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                onPlay(isPlaying);
+                isPlaying = !isPlaying;
+            }
+        });
+
+        mFileNameTextView.setText(item.getName());
+        mFileLengthTextView.setText(String.format("%02d:%02d", minutes,seconds));
+
+        builder.setView(view);
+
+        // request a window without the title
+        dialog.getWindow().requestFeature(Window.FEATURE_NO_TITLE);
+
+        return builder.create();
+    }
+
+    @Override
+    public void onStart() {
+        super.onStart();
+
+        //set transparent background
+        Window window = getDialog().getWindow();
+        window.setBackgroundDrawableResource(android.R.color.transparent);
+
+        //disable buttons from dialog
+        AlertDialog alertDialog = (AlertDialog) getDialog();
+        alertDialog.getButton(Dialog.BUTTON_POSITIVE).setEnabled(false);
+        alertDialog.getButton(Dialog.BUTTON_NEGATIVE).setEnabled(false);
+        alertDialog.getButton(Dialog.BUTTON_NEUTRAL).setEnabled(false);
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+
+        if (mMediaPlayer != null) {
+            stopPlaying();
         }
     }
 
     @Override
-    public View onCreateView(LayoutInflater inflater, ViewGroup container,
-                             Bundle savedInstanceState) {
-        // Inflate the layout for this fragment
-        return inflater.inflate(R.layout.fragment_play_back, container, false);
-    }
+    public void onDestroy() {
+        super.onDestroy();
 
-    // TODO: Rename method, update argument and hook method into UI event
-    public void onButtonPressed(Uri uri) {
-        if (mListener != null) {
-            mListener.onFragmentInteraction(uri);
+        if (mMediaPlayer != null) {
+            stopPlaying();
         }
     }
 
-    @Override
-    public void onAttach(Context context) {
-        super.onAttach(context);
-        if (context instanceof OnFragmentInteractionListener) {
-            mListener = (OnFragmentInteractionListener) context;
+    // Play start/stop
+    private void onPlay(boolean isPlaying){
+        if (!isPlaying) {
+            //currently MediaPlayer is not playing audio
+            if(mMediaPlayer == null) {
+                startPlaying(); //start from beginning
+            } else {
+                resumePlaying(); //resume the currently paused MediaPlayer
+            }
+
         } else {
-            throw new RuntimeException(context.toString()
-                    + " must implement OnFragmentInteractionListener");
+            //pause the MediaPlayer
+            pausePlaying();
         }
     }
 
-    @Override
-    public void onDetach() {
-        super.onDetach();
-        mListener = null;
+    private void startPlaying() {
+        mPlayButton.setImageResource(R.drawable.ic_media_pause);
+        mMediaPlayer = new MediaPlayer();
+
+        try {
+            mMediaPlayer.setDataSource(item.getFilePath());
+            mMediaPlayer.prepare();
+            mSeekBar.setMax(mMediaPlayer.getDuration());
+
+            mMediaPlayer.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
+                @Override
+                public void onPrepared(MediaPlayer mp) {
+                    mMediaPlayer.start();
+                }
+            });
+        } catch (IOException e) {
+            Log.e(LOG_TAG, "prepare() failed");
+        }
+
+        mMediaPlayer.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
+            @Override
+            public void onCompletion(MediaPlayer mp) {
+                stopPlaying();
+            }
+        });
+
+        updateSeekBar();
+
+        //keep screen on while playing audio
+        getActivity().getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
 
-    /**
-     * This interface must be implemented by activities that contain this
-     * fragment to allow an interaction in this fragment to be communicated
-     * to the activity and potentially other fragments contained in that
-     * activity.
-     * <p>
-     * See the Android Training lesson <a href=
-     * "http://developer.android.com/training/basics/fragments/communicating.html"
-     * >Communicating with Other Fragments</a> for more information.
-     */
-    public interface OnFragmentInteractionListener {
-        // TODO: Update argument type and name
-        void onFragmentInteraction(Uri uri);
+    private void prepareMediaPlayerFromPoint(int progress) {
+        //set mediaPlayer to start from middle of the audio file
+
+        mMediaPlayer = new MediaPlayer();
+
+        try {
+            mMediaPlayer.setDataSource(item.getFilePath());
+            mMediaPlayer.prepare();
+            mSeekBar.setMax(mMediaPlayer.getDuration());
+            mMediaPlayer.seekTo(progress);
+
+            mMediaPlayer.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
+                @Override
+                public void onCompletion(MediaPlayer mp) {
+                    stopPlaying();
+                }
+            });
+
+        } catch (IOException e) {
+            Log.e(LOG_TAG, "prepare() failed");
+        }
+
+        //keep screen on while playing audio
+        getActivity().getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
+
+    private void pausePlaying() {
+        mPlayButton.setImageResource(R.drawable.ic_media_play);
+        mHandler.removeCallbacks(mRunnable);
+        mMediaPlayer.pause();
+    }
+
+    private void resumePlaying() {
+        mPlayButton.setImageResource(R.drawable.ic_media_pause);
+        mHandler.removeCallbacks(mRunnable);
+        mMediaPlayer.start();
+        updateSeekBar();
+    }
+
+    private void stopPlaying() {
+        mPlayButton.setImageResource(R.drawable.ic_media_play);
+        mHandler.removeCallbacks(mRunnable);
+        mMediaPlayer.stop();
+        mMediaPlayer.reset();
+        mMediaPlayer.release();
+        mMediaPlayer = null;
+
+        mSeekBar.setProgress(mSeekBar.getMax());
+        isPlaying = !isPlaying;
+
+        mCurrentProgressTextView.setText(mFileLengthTextView.getText());
+        mSeekBar.setProgress(mSeekBar.getMax());
+
+        //allow the screen to turn off again once audio is finished playing
+        getActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+    }
+
+    //updating mSeekBar
+    private Runnable mRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if(mMediaPlayer != null){
+
+                int mCurrentPosition = mMediaPlayer.getCurrentPosition();
+                mSeekBar.setProgress(mCurrentPosition);
+
+                long minutes = TimeUnit.MILLISECONDS.toMinutes(mCurrentPosition);
+                long seconds = TimeUnit.MILLISECONDS.toSeconds(mCurrentPosition)
+                        - TimeUnit.MINUTES.toSeconds(minutes);
+                mCurrentProgressTextView.setText(String.format("%02d:%02d", minutes, seconds));
+
+                updateSeekBar();
+            }
+        }
+    };
+
+    private void updateSeekBar() {
+        mHandler.postDelayed(mRunnable, 1000);
+    }
+
+
+
 }

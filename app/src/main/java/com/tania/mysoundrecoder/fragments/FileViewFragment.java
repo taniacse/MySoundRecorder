@@ -3,7 +3,12 @@ package com.tania.mysoundrecoder.fragments;
 import android.content.Context;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.FileObserver;
 import android.support.v4.app.Fragment;
+import android.support.v7.widget.DefaultItemAnimator;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -30,14 +35,7 @@ public class FileViewFragment extends Fragment {
         // Required empty public constructor
     }
 
-    /**
-     * Use this factory method to create a new instance of
-     * this fragment using the provided parameters.
-     *
-     * @param param1 Parameter 1.
-     * @param param2 Parameter 2.
-     * @return A new instance of fragment FileViewFragment.
-     */
+
     // TODO: Rename and change types and number of parameters
     public static FileViewFragment newInstance(int position) {
         FileViewFragment fragment = new FileViewFragment();
@@ -51,13 +49,36 @@ public class FileViewFragment extends Fragment {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         position = getArguments().getInt(ARG_POSITION);
+        observer.startWatching();
     }
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
         // Inflate the layout for this fragment
-        return inflater.inflate(R.layout.fragment_file_view, container, false);
+
+
+
+        View v = inflater.inflate(R.layout.fragment_file_view, container, false);
+
+        RecyclerView mRecyclerView = (RecyclerView) v.findViewById(R.id.recyclerView);
+        mRecyclerView.setHasFixedSize(true);
+        LinearLayoutManager llm = new LinearLayoutManager(getActivity());
+        llm.setOrientation(LinearLayoutManager.VERTICAL);
+
+        //newest to oldest order (database stores from oldest to newest)
+        llm.setReverseLayout(true);
+        llm.setStackFromEnd(true);
+
+        mRecyclerView.setLayoutManager(llm);
+        mRecyclerView.setItemAnimator(new DefaultItemAnimator());
+
+        mFileViewerAdapter = new FileViewAdapter(getActivity(), llm);
+        mRecyclerView.setAdapter(mFileViewerAdapter);
+
+        return v;
+
+
     }
 
     // TODO: Rename method, update argument and hook method into UI event
@@ -77,4 +98,33 @@ public class FileViewFragment extends Fragment {
         // TODO: Update argument type and name
         void onFragmentInteraction(Uri uri);
     }
+
+
+
+
+    FileObserver observer =
+            new FileObserver(android.os.Environment.getExternalStorageDirectory().toString()
+                    + "/SoundRecorder") {
+                // set up a file observer to watch this directory on sd card
+                @Override
+                public void onEvent(int event, String file) {
+                    if(event == FileObserver.DELETE){
+                        // user deletes a recording file out of the app
+
+                        String filePath = android.os.Environment.getExternalStorageDirectory().toString()
+                                + "/SoundRecorder" + file + "]";
+
+                        Log.d(LOG_TAG, "File deleted ["
+                                + android.os.Environment.getExternalStorageDirectory().toString()
+                                + "/SoundRecorder" + file + "]");
+
+                        // remove file from database and recyclerview
+                        mFileViewerAdapter.removeOutOfApp(filePath);
+                    }
+                }
+            };
+
+
+
+
 }
