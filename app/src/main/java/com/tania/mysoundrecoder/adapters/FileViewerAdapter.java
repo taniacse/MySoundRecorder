@@ -24,21 +24,19 @@ import com.tania.mysoundrecoder.Listeners.OnDatabaseChangedListener;
 import com.tania.mysoundrecoder.R;
 import com.tania.mysoundrecoder.RecordingItem;
 import com.tania.mysoundrecoder.fragments.PlayBackFragment;
-import com.tania.mysoundrecoder.fragments.PlayFragment;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Created by User on 3/16/2017.
+ * Created by User on 6/16/2017.
  */
 
-public class FileViewAdapter extends RecyclerView.Adapter<FileViewAdapter.RecordingsViewHolder>
-     implements OnDatabaseChangedListener{
+public class FileViewerAdapter extends RecyclerView.Adapter<FileViewerAdapter.RecordingsViewHolder> implements OnDatabaseChangedListener {
 
 
-    private static final String LOG_TAG = "FileVieweAdapter";
+    private static final String LOG_TAG = "MySoundRecorder";
 
     private DbHelper mDatabase;
 
@@ -47,7 +45,8 @@ public class FileViewAdapter extends RecyclerView.Adapter<FileViewAdapter.Record
     LinearLayoutManager llm;
 
 
-    public FileViewAdapter(Context context, LinearLayoutManager linearLayoutManager) {
+
+    public FileViewerAdapter(Context context, LinearLayoutManager linearLayoutManager) {
         super();
         mContext = context;
         mDatabase = new DbHelper(mContext);
@@ -55,8 +54,25 @@ public class FileViewAdapter extends RecyclerView.Adapter<FileViewAdapter.Record
         llm = linearLayoutManager;
     }
 
+
+    @Override
+    public RecordingsViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+
+        View itemView = LayoutInflater.
+                from(parent.getContext()).
+                inflate(R.layout.card_view, parent, false);
+
+        mContext = parent.getContext();
+
+        return new RecordingsViewHolder(itemView);
+
+    }
+
     @Override
     public void onBindViewHolder(final RecordingsViewHolder holder, int position) {
+
+        Log.d(LOG_TAG, " On Bind Called ");
+        Log.d(LOG_TAG,"Position " + position);
 
         item = getItem(position);
         long itemDuration = item.getLength();
@@ -64,6 +80,8 @@ public class FileViewAdapter extends RecyclerView.Adapter<FileViewAdapter.Record
         long minutes = TimeUnit.MILLISECONDS.toMinutes(itemDuration);
         long seconds = TimeUnit.MILLISECONDS.toSeconds(itemDuration)
                 - TimeUnit.MINUTES.toSeconds(minutes);
+
+        Log.d(LOG_TAG," item name " + item.getName());
 
         holder.vName.setText(item.getName());
         holder.vLength.setText(String.format("%02d:%02d", minutes, seconds));
@@ -135,19 +153,39 @@ public class FileViewAdapter extends RecyclerView.Adapter<FileViewAdapter.Record
                 return false;
             }
         });
+
+
+
+
+
+
+    }
+
+
+
+    @Override
+    public int getItemCount() {
+        return mDatabase.getCount();
+    }
+
+    public RecordingItem getItem(int position) {
+        return mDatabase.getItemAt(position);
+    }
+
+
+    @Override
+    public void onNewDatabaseEntryAdded() {
+
+        notifyItemInserted(getItemCount() - 1);
+        llm.scrollToPosition(getItemCount() - 1);
+
     }
 
     @Override
-    public RecordingsViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+    public void onDatabaseEntryRenamed() {
 
-        View itemView = LayoutInflater.
-                from(parent.getContext()).
-                inflate(R.layout.card_view, parent, false);
-
-        mContext = parent.getContext();
-
-        return new RecordingsViewHolder(itemView);
     }
+
 
     public static class RecordingsViewHolder extends RecyclerView.ViewHolder {
         protected TextView vName;
@@ -164,27 +202,6 @@ public class FileViewAdapter extends RecyclerView.Adapter<FileViewAdapter.Record
         }
     }
 
-    @Override
-    public int getItemCount() {
-        return mDatabase.getCount();
-    }
-
-    public RecordingItem getItem(int position) {
-        return mDatabase.getItemAt(position);
-    }
-
-    @Override
-    public void onNewDatabaseEntryAdded() {
-        //item added to top of the list
-        notifyItemInserted(getItemCount() - 1);
-        llm.scrollToPosition(getItemCount() - 1);
-    }
-
-    @Override
-    //TODO
-    public void onDatabaseEntryRenamed() {
-
-    }
 
     public void remove(int position) {
         //remove item from database, recyclerview and storage
@@ -308,4 +325,7 @@ public class FileViewAdapter extends RecyclerView.Adapter<FileViewAdapter.Record
         AlertDialog alert = confirmDelete.create();
         alert.show();
     }
+
+
+
 }

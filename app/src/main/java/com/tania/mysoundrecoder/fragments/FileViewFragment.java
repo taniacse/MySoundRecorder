@@ -1,6 +1,5 @@
 package com.tania.mysoundrecoder.fragments;
 
-import android.content.Context;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.FileObserver;
@@ -14,7 +13,7 @@ import android.view.View;
 import android.view.ViewGroup;
 
 import com.tania.mysoundrecoder.R;
-import com.tania.mysoundrecoder.adapters.FileViewAdapter;
+import com.tania.mysoundrecoder.adapters.FileViewerAdapter;
 
 /**
  * A simple {@link Fragment} subclass.
@@ -29,7 +28,7 @@ public class FileViewFragment extends Fragment {
     private static final String LOG_TAG = "FileViewerFragment";
 
     private int position;
-    private FileViewAdapter mFileViewerAdapter;
+    private FileViewerAdapter mFileViewerAdapter;
 
     public FileViewFragment() {
         // Required empty public constructor
@@ -62,18 +61,18 @@ public class FileViewFragment extends Fragment {
         View v = inflater.inflate(R.layout.fragment_file_view, container, false);
 
         RecyclerView mRecyclerView = (RecyclerView) v.findViewById(R.id.recyclerView);
-        mRecyclerView.setHasFixedSize(true);
+        mRecyclerView.setHasFixedSize(false);
         LinearLayoutManager llm = new LinearLayoutManager(getActivity());
         llm.setOrientation(LinearLayoutManager.VERTICAL);
 
         //newest to oldest order (database stores from oldest to newest)
         llm.setReverseLayout(true);
-        llm.setStackFromEnd(true);
+         llm.setStackFromEnd(true);
 
         mRecyclerView.setLayoutManager(llm);
         mRecyclerView.setItemAnimator(new DefaultItemAnimator());
 
-        mFileViewerAdapter = new FileViewAdapter(getActivity(), llm);
+        mFileViewerAdapter = new FileViewerAdapter(getActivity(), llm);
         mRecyclerView.setAdapter(mFileViewerAdapter);
 
         return v;
